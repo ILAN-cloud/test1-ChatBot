@@ -1,0 +1,151 @@
+<!doctype html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Widget Assistant IA — Voix & Texte</title>
+  <style>
+    :root { --z: 999999; --accent:#111; --border:#e8e8e8; --bg:#fff; --chat:#fafafa; }
+    * { box-sizing: border-box; }
+    body { margin:0; font-family: system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif; }
+    #ai-bubble { position:fixed; right:20px; bottom:20px; z-index:var(--z); background:var(--accent); color:#fff; border-radius:999px; padding:12px 14px; cursor:pointer; box-shadow:0 8px 24px rgba(0,0,0,.25); }
+    #ai-panel { display:none; position:fixed; right:20px; bottom:80px; z-index:var(--z); width:360px; max-height:70vh; background:var(--bg); border-radius:16px; box-shadow:0 24px 60px rgba(0,0,0,.25); overflow:hidden; border:1px solid var(--border); }
+    .ai-head { padding:12px 14px; border-bottom:1px solid var(--border); font-weight:600; display:flex; justify-content:space-between; align-items:center; }
+    .ai-body { padding:12px; }
+    .ai-chat { height:360px; overflow:auto; background:var(--chat); border:1px solid var(--border); border-radius:12px; padding:8px; }
+    .ai-msg { margin:8px 0; display:flex; }
+    .ai-msg .ai-bubble { padding:10px 12px; border-radius:12px; max-width:80%; line-height:1.45; font-size:14px; }
+    .ai-me { justify-content:flex-end; }
+    .ai-me .ai-bubble { background:#111; color:#fff; }
+    .ai-bot .ai-bubble { background:#fff; border:1px solid var(--border); color:#111; }
+    .ai-composer { display:flex; gap:8px; margin:12px 0 0 0; }
+    .ai-input { flex:1; border:1px solid var(--border); border-radius:12px; padding:12px; font-size:14px; outline:none; }
+    .ai-mic { border:1px solid var(--border); background:#fff; border-radius:12px; padding:0 14px; cursor:pointer; font-size:16px; }
+    audio { width:100%; margin-top:8px; display:none; }
+    .ai-hint { font-size:12px; color:#666; padding:6px 2px 0; }
+  </style>
+</head>
+<body>
+  <div id="ai-bubble" aria-label="Ouvrir le chat">💬 Discuter</div>
+  <div id="ai-panel" role="dialog" aria-label="Assistant IA">
+    <div class="ai-head">
+      <span>Assistant IA</span>
+      <button id="ai-close" style="border:0;background:transparent;cursor:pointer;font-size:18px;line-height:1">×</button>
+    </div>
+    <div class="ai-body">
+      <div id="ai-chat" class="ai-chat"></div>
+      <div class="ai-composer">
+        <input id="ai-input" class="ai-input" placeholder="Tape ton message..." autocomplete="off" />
+        <button id="ai-mic" class="ai-mic" title="Maintenir pour parler">🎙️</button>
+      </div>
+      <div class="ai-hint">↵ Enter pour envoyer · Maintiens 🎙️ pour un vocal</div>
+      <audio id="ai-audio" controls></audio>
+    </div>
+  </div>
+
+<script>
+  const CONFIG = {
+    api_base: "http://localhost:8000",   // ⇦ remplace par ton URL Render en prod
+    client_id: "client@pme.fr",
+    welcome: "Bienvenue 👋 Comment puis-je vous aider ?"
+  };
+
+  const bubble = document.getElementById("ai-bubble");
+  const panel  = document.getElementById("ai-panel");
+  const close  = document.getElementById("ai-close");
+  const chat   = document.getElementById("ai-chat");
+  const input  = document.getElementById("ai-input");
+  const micBtn = document.getElementById("ai-mic");
+  const audioEl= document.getElementById("ai-audio");
+
+  function openPanel(){ panel.style.display="block"; input.focus(); if(CONFIG.welcome){ add("bot", CONFIG.welcome); CONFIG.welcome=""; } }
+  function closePanel(){ panel.style.display="none"; }
+
+  bubble.onclick = ()=> panel.style.display==="none" ? openPanel() : closePanel();
+  close.onclick  = closePanel;
+
+  function add(who, text){
+    const row = document.createElement("div");
+    row.className = "ai-msg " + (who==="me" ? "ai-me" : "ai-bot");
+    const b = document.createElement("div");
+    b.className = "ai-bubble";
+    b.textContent = text;
+    row.appendChild(b);
+    chat.appendChild(row);
+    chat.scrollTop = chat.scrollHeight;
+  }
+
+  async function sendText(){
+    const text = input.value.trim();
+    if(!text) return;
+    input.value = "";
+    add("me", text);
+    try{
+      const r = await fetch(CONFIG.api_base + "/chat", {
+        method: "POST", headers: {"Content-Type": "application/json"},
+        body: JSON.stringify({ message: text })
+      });
+      const data = await r.json();
+      const reply = data.reply || "Erreur serveur";
+      add("bot", reply);
+      speakText(reply);
+    }catch(e){
+      add("bot", "Impossible de joindre le serveur.");
+    }
+  }
+  input.addEventListener("keydown", (e)=>{ if(e.key === "Enter") sendText(); });
+
+  async function speakText(text){
+    try{
+      const r = await fetch(CONFIG.api_base + "/speak", {
+        method: "POST",
+        headers: {"Content-Type":"application/json"},
+        body: JSON.stringify({ text })
+      });
+      const data = await r.json();
+      if(data.audio_url){
+        audioEl.src = data.audio_url;
+        audioEl.style.display = "block";
+        await audioEl.play().catch(()=>{});
+      }
+    }catch(e){}
+  }
+
+  // Voice capture
+  let mr, chunks=[];
+  async function micStart(){
+    const stream = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation:true, noiseSuppression:true } });
+    mr = new MediaRecorder(stream, { mimeType: 'audio/webm' });
+    chunks = [];
+    mr.ondataavailable = e => chunks.push(e.data);
+    mr.start();
+    micBtn.textContent = "🛑";
+  }
+  async function micStopAndSend(){
+    if(!mr || mr.state==='inactive') return;
+    await new Promise(res=>{ mr.onstop=res; mr.stop(); });
+    micBtn.textContent = "🎙️";
+    const blob = new Blob(chunks, { type:'audio/webm' });
+    const form = new FormData();
+    form.append('audio', blob, 'speech.webm');
+    try{
+      add("me", "🎤 (vocal)");
+      const r = await fetch(`${CONFIG.api_base}/voice-chat`, { method: "POST", body: form });
+      const d = await r.json();
+      if(d.user_text) add("me", d.user_text);
+      if(d.bot_text) add("bot", d.bot_text);
+      if(d.audio_url){
+        audioEl.src = d.audio_url;
+        audioEl.style.display = "block";
+        await audioEl.play().catch(()=>{});
+      }
+    }catch(e){
+      add("bot", "Impossible de traiter le vocal.");
+    }
+  }
+  micBtn.onmousedown = micStart;
+  micBtn.onmouseup = micStopAndSend;
+  micBtn.onmouseleave = () => { if(mr && mr.state!=='inactive') micStopAndSend(); };
+</script>
+</body>
+</html>

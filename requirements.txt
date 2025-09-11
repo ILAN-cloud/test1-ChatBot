@@ -1,0 +1,10 @@
+fastapi==0.110.0
+uvicorn==0.30.0
+pydantic==2.7.1
+httpx==0.27.0
+python-dotenv==1.0.1
+pydub==0.25.1
+python-multipart==0.0.9
+twilio==9.0.5
+jinja2==3.1.4     # garder si tu veux utiliser templates.py
+# pyyaml SUPPRIMÉ (multi-tenant supprimé)
