@@ -6,22 +6,19 @@ httpx==0.27.0
 openai==1.43.0
 pydub==0.25.1
 
-# Pydantic (versions avec wheels prêts)
+# Pydantic
 pydantic==2.7.4
 pydantic-core==2.18.4
 
-# JSON rapide (optionnel) : ujson a des wheels stables ; évite orjson
+# JSON rapide
 ujson==5.9.0
 
-# email
+# e-mail
 aiosmtplib==2.0.2
 
 # CORS
 starlette==0.37.2
 
-# Twilio (si tu l’utilises)
+# Twilio (si tu l'utilises)
 twilio==9.0.5
-
-# Azure TTS (SDK REST pas nécessaire, on fait HTTPx)
-# Si tu avais d'autres libs problématiques, enlève-les pour l’instant.
 
